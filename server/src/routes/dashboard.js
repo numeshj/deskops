@@ -242,11 +242,16 @@ async function week(from, to) {
      ORDER BY d
   `);
 
+  // GROUP BY the expression, not the alias — see the comment on oosByBrand
+  // below. Aiven's MySQL 8 runs with ONLY_FULL_GROUP_BY (the local Docker
+  // MariaDB doesn't enforce it, which is how this shipped without being
+  // caught locally); repeating the full expression makes the functional
+  // dependency provable regardless of how many joined columns feed into it.
   const callReasons = await query(`
     SELECT COALESCE(rs.label, 'Not categorised') AS label, COUNT(*) AS n
       FROM activity a LEFT JOIN reason rs ON rs.reason_id = a.reason_id
      WHERE a.work_type_id = 'call' AND DATE(a.occurred_at) BETWEEN ${from} AND ${to} AND a.is_draft = 0
-     GROUP BY label ORDER BY n DESC LIMIT 8
+     GROUP BY COALESCE(rs.label, 'Not categorised') ORDER BY n DESC LIMIT 8
   `);
 
   const carriers = await query(`
@@ -255,14 +260,15 @@ async function week(from, to) {
            SUM(status = 'done') AS closed
       FROM activity
      WHERE work_type_id = 'issue' AND DATE(occurred_at) BETWEEN ${from} AND ${to} AND is_draft = 0
-     GROUP BY carrier ORDER BY n DESC
+     GROUP BY COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(detail, '$.carrier')), ''), 'Not recorded')
+     ORDER BY n DESC
   `);
 
   const issueKinds = await query(`
     SELECT COALESCE(rs.label, a.reason_freetext, 'Not categorised') AS label, COUNT(*) AS n
       FROM activity a LEFT JOIN reason rs ON rs.reason_id = a.reason_id
      WHERE a.work_type_id = 'issue' AND DATE(a.occurred_at) BETWEEN ${from} AND ${to} AND a.is_draft = 0
-     GROUP BY label ORDER BY n DESC LIMIT 8
+     GROUP BY COALESCE(rs.label, a.reason_freetext, 'Not categorised') ORDER BY n DESC LIMIT 8
   `);
 
   const topStores = await query(`
