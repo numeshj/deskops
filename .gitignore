@@ -1,0 +1,51 @@
+# What must never reach GitHub, and why.
+#
+# Read this before adding an exception. The repository is about to be pushed
+# to a hosting account, and two of the entries below are not tidiness - they
+# are the difference between a private project and a disclosure.
+
+# --- her business, not ours -------------------------------------------------
+# migrated/ is the real workbook: 579 named shops, 286 contact names, their
+# phone numbers, and 13 months of who ordered what. It belongs to the
+# wholesaler. A private repo is one settings click and one added collaborator
+# away from not being private, and a git history keeps a file long after it is
+# deleted. The deployed app never needs these: the import runs from the
+# machine that already holds them, straight into the hosted database.
+migrated/
+
+# --- secrets ----------------------------------------------------------------
+# The JWT signing key and the database password. Anyone holding the JWT secret
+# can mint a token for any account, including an admin one.
+server/.env
+web/.env
+*.env.local
+!server/.env.example
+
+# --- big, generated, or specific to one machine -----------------------------
+node_modules/
+
+# The portable Node and MariaDB, the database files, and the logs. About
+# 130 MB, and GitHub refuses a single file over 100 MB anyway.
+runtime/
+
+# Built by the Dockerfile during deploy, and shipped to Windows inside the
+# offline zip. Committing it means a stale bundle can be served.
+web/dist/
+deskops-offline-deps.zip
+
+# --- test and tooling output ------------------------------------------------
+tests/node_modules/
+tests/test-results/
+tests/playwright-report/
+tests/shot*.mjs
+*.log
+
+# --- editors and operating systems ------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# --- this assistant's working folder ----------------------------------------
+Claude outputs/

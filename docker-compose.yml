@@ -1,0 +1,70 @@
+# Local development with nothing installed but Docker.
+#
+#   docker compose up --build        start everything
+#   docker compose run --rm seed     create users + load the workbook data
+#   docker compose down -v           wipe and start over
+#
+# Then open http://localhost:4000
+
+services:
+  db:
+    image: mariadb:11
+    environment:
+      MARIADB_DATABASE: deskops
+      MARIADB_USER: deskops
+      MARIADB_PASSWORD: deskops
+      MARIADB_ROOT_PASSWORD: rootpw
+    ports:
+      - "3307:3306"          # 3307 on the host, so it can't clash with a local MySQL
+    volumes:
+      - dbdata:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USER: deskops
+      DB_PASSWORD: deskops
+      DB_NAME: deskops
+      JWT_SECRET: local-dev-secret-change-me
+      SERVE_WEB: 1
+      MIGRATE_ON_BOOT: 1
+    ports:
+      - "4000:4000"
+    restart: unless-stopped
+
+  # one-shot helper: users + the migrated workbook data
+  seed:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USER: deskops
+      DB_PASSWORD: deskops
+      DB_NAME: deskops
+    volumes:
+      - ./migrated:/app/migrated:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "node server/src/db/migrate.js &&
+       node server/src/db/seedUsers.js &&
+       node server/src/import.js /app/migrated"
+    profiles: ["tools"]
+
+volumes:
+  dbdata:

@@ -1,0 +1,43 @@
+# Render blueprint — free tier.
+#
+# The database is NOT defined here: Render's free Postgres expires after 30
+# days, and there is no free MySQL. Point DB_* at an external free MySQL
+# (see DEPLOYING.md) and this service stays free indefinitely.
+
+services:
+  - type: web
+    name: deskops
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SERVE_WEB
+        value: "1"
+      - key: MIGRATE_ON_BOOT
+        value: "1"
+      - key: JWT_SECRET
+        generateValue: true      # Render generates and stores it
+      - key: DB_HOST
+        sync: false              # set these in the dashboard
+      - key: DB_PORT
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: DB_SSL
+        value: "1"               # every hosted free MySQL requires TLS
+
+      # The two sign-in passwords. sync:false means Render asks for them when
+      # the blueprint is created rather than storing them in this file, which
+      # is in the repository. seedUsers.js refuses to run in production without
+      # them, so a deploy cannot quietly fall back to desk1234.
+      - key: SEED_USER_PASSWORD
+        sync: false
+      - key: SEED_ADMIN_PASSWORD
+        sync: false

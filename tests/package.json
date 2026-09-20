@@ -1,0 +1,6 @@
+{
+  "name": "deskops-tests",
+  "private": true,
+  "type": "module",
+  "devDependencies": { "@playwright/test": "^1.49.0" }
+}

@@ -1,0 +1,95 @@
+# Free CI on GitHub Actions — 2,000 minutes/month on a free account, and this
+# workflow uses about one minute per push.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    services:
+      db:
+        image: mariadb:11
+        env:
+          MARIADB_DATABASE: deskops
+          MARIADB_USER: deskops
+          MARIADB_PASSWORD: deskops
+          MARIADB_ROOT_PASSWORD: rootpw
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            server/package-lock.json
+            web/package-lock.json
+
+      - name: Install server
+        working-directory: server
+        run: npm ci
+
+      - name: Install web
+        working-directory: web
+        run: npm ci
+
+      - name: Build web
+        working-directory: web
+        run: npm run build
+
+      - name: Apply schema
+        working-directory: server
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_USER: deskops
+          DB_PASSWORD: deskops
+          DB_NAME: deskops
+        run: node src/db/migrate.js
+
+      # Boots the real app against a real database and checks it answers.
+      # Catches the mistakes that matter: a broken migration, a bad import,
+      # a route that throws on startup.
+      - name: Smoke test
+        working-directory: server
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_USER: deskops
+          DB_PASSWORD: deskops
+          DB_NAME: deskops
+          JWT_SECRET: ci-secret
+          PORT: 4000
+          SERVE_WEB: 1
+        run: |
+          node src/db/seedUsers.js
+          node src/index.js &
+          for i in $(seq 1 30); do
+            sleep 1
+            curl -fsS http://localhost:4000/api/health >/dev/null 2>&1 && break
+          done
+          echo "--- health ---"
+          curl -fsS http://localhost:4000/api/health
+          echo ""
+          echo "--- login ---"
+          TOKEN=$(curl -fsS -X POST http://localhost:4000/api/auth/login \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"yashoda@example.com","password":"desk1234"}' \
+            | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>console.log(JSON.parse(d).token))")
+          test -n "$TOKEN" || { echo "login failed"; exit 1; }
+          echo "--- authenticated call ---"
+          curl -fsS http://localhost:4000/api/vocab/work-types -H "Authorization: Bearer $TOKEN" >/dev/null
+          echo "--- SPA served ---"
+          curl -fsS http://localhost:4000/ | head -c 80
+          echo ""
+          echo "all checks passed"

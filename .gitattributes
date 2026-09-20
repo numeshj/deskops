@@ -1,0 +1,40 @@
+# Line endings, pinned rather than guessed.
+#
+# Without this, what lands on disk depends on each person's core.autocrlf, and
+# two files in here genuinely care:
+#
+#   *.bat and *.ps1 must be CRLF. Windows PowerShell and cmd both tolerate LF
+#   most of the time and then do not - a .bat with LF endings can mis-parse a
+#   multi-line block, and that failure looks like the script being wrong rather
+#   than the file being wrong.
+#
+#   The Dockerfile and anything the Linux container runs must be LF. A CRLF
+#   shebang line fails with "no such file or directory", naming a file that is
+#   plainly there, which is a genuinely horrible hour.
+#
+# So: LF in the repository for everything, and CRLF on checkout only where
+# Windows needs it, whatever anyone's local setting says.
+
+* text=auto eol=lf
+
+*.bat  text eol=crlf
+*.ps1  text eol=crlf
+*.cmd  text eol=crlf
+
+Dockerfile text eol=lf
+*.sh       text eol=lf
+
+# Binary, so Git never tries to "fix" them
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.zip  binary
+*.xlsx binary
+
+# Generated - keep these out of diffs and out of language statistics
+server/package-lock.json linguist-generated=true
+web/package-lock.json    linguist-generated=true
+tests/package-lock.json  linguist-generated=true
