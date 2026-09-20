@@ -14,7 +14,13 @@
 # static assets through the function too.
 
 [build]
-  command = "npm ci --omit=dev && npm --prefix server ci --omit=dev && npm --prefix web ci && npm --prefix web run build"
+  # NODE_ENV=production is set as a site env var (the app needs it at
+  # runtime), and npm honors that for every install below — silently
+  # skipping devDependencies. That broke the build: vite lives in
+  # web/devDependencies, so "vite build" failed with "vite: not found".
+  # --include=dev overrides NODE_ENV just for the web install, where the
+  # build tooling actually lives.
+  command = "npm ci --omit=dev && npm --prefix server ci --omit=dev && npm --prefix web ci --include=dev && npm --prefix web run build"
   publish = "web/dist"
 
 [functions]
