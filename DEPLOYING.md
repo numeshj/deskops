@@ -46,9 +46,10 @@ this is not a case of squeezing into a free tier, it genuinely fits.
 This is the one thing that could have killed the project, so it is worth being
 precise about.
 
-Free web hosts sleep. [Render's free tier spins down after about 15 minutes
-idle and takes up to a minute to wake](https://hatchable.com/articles/state-of-free-web-hosting-in-2026).
-We designed this entire app around a five-second save. A fifty-second wait
+Free hosts are slow to respond after a period of nobody using them — a
+container spinning back up after sleeping, or (on Netlify, where this
+actually deploys) a serverless function's first invocation in a while. We
+designed this entire app around a five-second save. A fifty-second wait
 while a store manager waits on the phone would be indefensible.
 
 Three things fix it, in order of importance.
@@ -75,15 +76,15 @@ minute. It can never lose one, and it never blocks her.**
 ### Warm-up on page load
 
 The app pings `/api/health` the instant it opens, before the login form is
-even filled in. The container starts waking while she types her password, so
-by her first save it is usually up.
+even filled in. Whatever is cold starts waking while she types her password,
+so by her first save it is usually up.
 
 ### Keep it warm — free, two minutes to set up
 
 Point [cron-job.org](https://cron-job.org) or UptimeRobot (both free) at:
 
 ```
-https://<your-app>.onrender.com/api/health
+https://<your-site>.netlify.app/api/health
 ```
 
 Every 10 minutes, weekdays 07:00–19:00 her time. About 72 pings a day, well
@@ -97,8 +98,12 @@ is part of what keeps you inside the free allowance.
 
 ## Part 4 — Where to put it
 
-*Free tiers move. Everything in this section was re-checked on 20 September
-2026, and the date matters: Render cut its free plan earlier that month.*
+*Free tiers move fast enough that a section written that morning was wrong
+by the afternoon. This was originally written for Render, checked 20
+September 2026 against Render's own blog post claiming no card required —
+then actually trying to deploy that same day hit a card prompt anyway, on
+both the Blueprint flow and a plain Web Service. What follows is what was
+actually confirmed working, not what a provider's marketing page claimed.*
 
 ### Database — Aiven free MySQL
 
@@ -125,8 +130,10 @@ continuing activity, Aiven warns before deactivating, and the service comes
 back on request.
 
 Sign up at aiven.io/free-mysql-database and create a free MySQL service — pick
-an EU region if the client is in the UK/EU, to match Render's Frankfurt region
-below. Take the connection details from the service overview page:
+an EU region if the client is in the UK/EU. Netlify's free-tier functions run
+in the US regardless of where you are, so this deploy is already cross-region
+by necessity; at 40 records a day the extra latency is not something anyone
+will notice. Take the connection details from the service overview page:
 
 ```
 DB_HOST=<service>-<project>.aivencloud.com
@@ -171,25 +178,68 @@ records a day this is unlikely, but it's the failure mode to know.
 
 Avoid `db4free` and similar — unreliable, no backups.
 
-### App — Render free tier
+### App — Netlify free tier
 
-[Render's free web service](https://render.com/articles/platforms-with-a-real-free-tier-for-developers-in-2026)
-is still free and still needs no credit card: **750 instance hours per
-workspace per month, 512 MB RAM, Docker supported**. A calendar month is about
-730 hours, so one service running flat out fits — and with spin-down it uses a
-fraction of that.
+*Updated after actually trying to deploy.* This section originally recommended
+Render. In practice, as of the date above, **every free container host
+checked now demands a card before it will provision anything, $0 or not** —
+Render's Blueprint flow, Render's plain Web Service flow, and Northflank's
+own docs all confirmed this directly; Fly.io, Railway and Koyeb's card-free
+tiers are reportedly gone too. `render.yaml` is left in the repo in case that
+ever reverses, but it is not the path this app is actually deployed on.
 
-What changed in September 2026 is that Render removed the free database tiers.
-That does not touch us: the database was always going to be external, because
-the free Postgres expired after 30 days and there was never a free MySQL.
+[Netlify's free tier](https://www.netlify.com/pricing/) is the one that
+still works without a card: permanent, and — unlike Vercel's Hobby plan,
+which its terms restrict to personal non-commercial use — its terms
+explicitly allow this kind of commercial use.
 
-`render.yaml` is included. Push to GitHub, create a Blueprint in Render, set
-the `DB_*` and `SEED_*` variables, deploy. `JWT_SECRET` is generated for you.
-The schema applies itself on first boot, because free hosts give you no shell.
+The trade-off is architectural, not financial. Netlify has no long-running
+container to keep a port open, so the Express app is wrapped as a single
+serverless function instead of listening on one:
 
-If Render ever stops being free, [Koyeb](https://www.koyeb.com) has a
-comparable perpetual free tier — one service, 512 MB, scale-to-zero, no card —
-and takes the same Dockerfile.
+- `netlify/functions/api.js` imports the same `app` from `server/src/app.js`
+  and wraps it with `serverless-http` — every route, every piece of
+  middleware, unchanged.
+- `netlify.toml` builds the React app and serves it straight from Netlify's
+  CDN, and redirects `/api/*` to the function while everything else falls
+  through to `index.html` for client-side routing.
+- `server/src/index.js` (the `app.listen` entrypoint) still exists unchanged
+  for local dev and `docker compose` — Netlify never runs it.
+
+This was verified end-to-end against the live Aiven database before writing
+this — health check, login, the JWT cookie, and an authenticated query all
+worked through the function wrapper exactly as they do under Docker.
+Attachments (photos/PDFs) already live as blobs in MySQL rather than on
+disk, which is what makes this portable to a stateless function at all — a
+disk-based upload store would have been a hard blocker here.
+
+To deploy: sign up at netlify.com (no card), **Add new site → Import an
+existing project**, connect `github.com/numeshj/deskops`. Netlify reads
+`netlify.toml` automatically. Add the environment variables below in
+**Site configuration → Environment variables**, then deploy:
+
+```
+NODE_ENV=production
+SERVE_WEB=0                # Netlify's CDN serves web/dist; the function only handles /api/*
+JWT_SECRET=<a long random string — see Part 4b>
+DB_HOST=<from Aiven>
+DB_PORT=<from Aiven>
+DB_USER=avnadmin
+DB_PASSWORD=<from Aiven>
+DB_NAME=defaultdb
+DB_SSL=1
+```
+
+There is no `MIGRATE_ON_BOOT` step here — a function has no "boot", so the
+schema is applied once, up front, from your machine via `load-remote.bat`
+(Part 5), not by the deployed app.
+
+**One real limit to know:** Netlify's synchronous function responses cap
+around 6 MB. Attachments are capped at 8 MB in the app (`MAX_BYTES` in
+`server/src/routes/attachments.js`), so a large photo or PDF near that
+ceiling could fail on Netlify where it would have succeeded on Render. Worth
+lowering that cap if it ever bites, but 40 records a day of mostly phone
+photos is unlikely to hit it soon.
 
 ### CI — GitHub Actions
 
@@ -332,9 +382,9 @@ prerequisite for launching.
 | `DB_SSL` | off | **`1` on any hosted database** |
 | `DB_SSL_CA` | `server/certs/aiven-ca.pem` if present | Path to a pinned CA cert; only needed if Aiven ever rotates its project CA |
 | `DB_POOL` | `5` | Leave alone on a free tier |
-| `JWT_SECRET` | dev value | **Must change.** Render generates it |
-| `SERVE_WEB` | `1` | `0` to run the API alone (local Vite dev) |
-| `MIGRATE_ON_BOOT` | `1` | Applies the schema at startup |
+| `JWT_SECRET` | dev value | **Must change.** Generate one yourself for Netlify — nothing auto-generates it there |
+| `SERVE_WEB` | `1` | `0` on Netlify (its CDN serves web/dist) and for local Vite dev |
+| `MIGRATE_ON_BOOT` | `1` | Applies the schema at startup. Irrelevant on Netlify — a function has no boot; run `load-remote.bat` instead |
 | `MIGRATE_INCLUDE` | — | `tidb_compat` to include the TiDB-only migration |
 | `SEED_USER_PASSWORD` | — | **Required in production.** Min 12 chars |
 | `SEED_ADMIN_PASSWORD` | — | **Required in production.** Must differ from the above |
@@ -345,11 +395,14 @@ prerequisite for launching.
 
 ## Sources
 
-Checked 20 September 2026.
+Checked 20 September 2026. The Render/Northflank/Vercel card findings below
+are firsthand — actually hitting the card prompt, and actually reading their
+own docs/ToS — not secondhand blog claims, several of which turned out to be
+stale or wrong on this exact question the same week.
 
 [TiDB Cloud plans](https://docs.pingcap.com/tidbcloud/select-cluster-tier/) ·
 [Aiven free MySQL](https://aiven.io/free-mysql-database) ·
-[Render on real free tiers in 2026](https://render.com/articles/platforms-with-a-real-free-tier-for-developers-in-2026) ·
-[Render free tier, what changed](https://freetier.co/directory/products/render) ·
-[Free Docker hosting compared](https://snapdeploy.dev/blog/free-docker-hosting-2026-platforms-compared) ·
-[State of free web hosting in 2026](https://hatchable.com/articles/state-of-free-web-hosting-in-2026)
+[Netlify pricing](https://www.netlify.com/pricing/) ·
+[Netlify commercial-use free-plan discussion](https://answers.netlify.com/t/can-we-use-netlify-free-plan-for-commercial-purposes/41545) ·
+[Vercel Hobby plan terms (personal, non-commercial)](https://vercel.com/docs/plans/hobby) ·
+[Northflank pricing docs — payment method required on every plan](https://northflank.com/docs/v1/application/billing/pricing-on-northflank)

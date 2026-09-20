@@ -1,5 +1,12 @@
 # Render blueprint — free tier.
 #
+# NOT the current deploy target. As of 20 September 2026, deploying this
+# Blueprint (and even a plain free Web Service) demanded a card despite
+# Render's own docs saying otherwise. The app is deployed on Netlify instead
+# — see netlify.toml and DEPLOYING.md. This file is kept in case Render's
+# policy reverses; if you try it again, check the card prompt is actually
+# gone before relying on it.
+#
 # The database is NOT defined here: Render's free Postgres expires after 30
 # days, and there is no free MySQL. Point DB_* at an external free MySQL
 # (see DEPLOYING.md) and this service stays free indefinitely.

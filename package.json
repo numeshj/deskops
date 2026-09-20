@@ -1,0 +1,8 @@
+{
+  "name": "deskops",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "serverless-http": "^4.0.0"
+  }
+}

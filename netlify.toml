@@ -1,0 +1,36 @@
+# Netlify deploy — the free-tier path that doesn't gate behind a card.
+#
+# Render's free plan (and every other free container host checked in
+# September 2026 — Northflank, Fly.io, Koyeb, Railway) now demands billing
+# details before it will provision anything, even a $0 service. Netlify's
+# free tier is the opposite of that: no card, permanent, and its own terms
+# explicitly allow commercial use — unlike Vercel's Hobby plan, which is
+# personal-use only.
+#
+# The trade-off is architectural, not financial: Netlify has no long-running
+# container, so the Express app is wrapped as a single serverless function
+# (netlify/functions/api.js) instead of listening on a port. The React build
+# is served directly from Netlify's CDN — faster and simpler than routing
+# static assets through the function too.
+
+[build]
+  command = "npm ci --omit=dev && npm --prefix server ci --omit=dev && npm --prefix web ci && npm --prefix web run build"
+  publish = "web/dist"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# API calls go to the function. Order matters: this must come before the SPA
+# catch-all below, or every /api/* request would return index.html instead.
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+
+# Client-side routing: any other path falls through to the SPA, exactly like
+# the Express catch-all does under Docker.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
