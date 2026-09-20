@@ -40,6 +40,51 @@ r.get("/work-types", async (_req, res, next) => {
   } catch (err) { next(err); }
 });
 
+/**
+ * Add a brand-new task/job type — not another reason under an existing one,
+ * a whole new chip in "What happened".
+ *
+ * Open to both roles, same reasoning as POST /reasons above: she is the one
+ * who knows when the desk's work has genuinely grown a new category, and
+ * making that wait on someone else just pushes it into "Other" instead.
+ *
+ * A custom type gets shared_fields: ["store"] — store and a free-text note,
+ * nothing more. CaptureBar.jsx's TYPE_FIELDS only has entries for the 9
+ * built-in ids, so an id it doesn't recognise already renders with no extra
+ * fields; this matches that on purpose rather than trying to keep a second
+ * list of per-type fields in sync.
+ */
+r.post("/work-types", async (req, res, next) => {
+  try {
+    const label = String(req.body?.label || "").trim().slice(0, 60);
+    if (!label) return res.status(400).json({ error: "label_required" });
+
+    const slug = norm(label).replace(/ /g, "_").slice(0, 28);
+    if (!slug) return res.status(400).json({ error: "label_required" });
+
+    const existing = await one("SELECT work_type_id, label FROM work_type WHERE work_type_id = ?", [slug]);
+    if (existing) return res.status(409).json({ error: "already_exists", work_type_id: existing.work_type_id, label: existing.label });
+
+    const [row] = await query("SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_sort FROM work_type");
+    const sortOrder = row.next_sort;
+    // Cycle the same five chart colours (--s1..--s5) charts already use, so a
+    // custom type's chip and any chart it appears in stay visually consistent
+    // with the rest of the palette rather than defaulting to one flat grey.
+    const PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4"];
+    const colour = PALETTE[(sortOrder - 1) % PALETTE.length];
+
+    await query(
+      `INSERT INTO work_type (work_type_id, label, colour, is_system, shared_fields, sort_order, active)
+       VALUES (?, ?, ?, 0, '["store"]', ?, 1)`,
+      [slug, label, colour, sortOrder]
+    );
+    res.status(201).json({ work_type_id: slug, label, colour });
+  } catch (err) {
+    if (err.code === "ER_DUP_ENTRY") return res.status(409).json({ error: "already_exists" });
+    next(err);
+  }
+});
+
 /* -------------------------------------------------- unlisted work (section 6) */
 
 /** The promotion queue. Anything at 3+ occurrences is ready to become a chip. */

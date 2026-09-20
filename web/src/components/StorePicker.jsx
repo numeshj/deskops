@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../lib/api.js";
 import DropdownPortal from "./DropdownPortal.jsx";
 
@@ -139,25 +140,40 @@ export default function StorePicker({ value, onChange, onPicked, inputRef, disab
         aria-autocomplete="list"
       />
 
-      <DropdownPortal anchorRef={box} portalRef={portal} open={open && rows.length > 0}>
-        <div className={`sugg${stale ? " stale" : ""}`} role="listbox" aria-busy={stale}>
-          {!q && <div className="sugghead">Recent</div>}
-          {rows.map((s, i) => (
-            <button
-              key={s.store_id}
-              type="button"
-              role="option"
-              aria-selected={!stale && i === cursor}
-              className={!stale && i === cursor ? "on" : ""}
-              onMouseEnter={() => setCursor(i)}
-              onClick={() => pick(s)}
-            >
-              <span className="code">{s.code_display}</span>
-              <span className="nm">{s.contact_name || s.name || "—"}</span>
-              <span className="hits">{s.mention_count}×</span>
-            </button>
-          ))}
-        </div>
+      <DropdownPortal
+        anchorRef={box}
+        portalRef={portal}
+        open={open && (rows.length > 0 || (!!q.trim() && !stale))}
+      >
+        {rows.length > 0 ? (
+          <div className={`sugg${stale ? " stale" : ""}`} role="listbox" aria-busy={stale}>
+            {!q && <div className="sugghead">Recent</div>}
+            {rows.map((s, i) => (
+              <button
+                key={s.store_id}
+                type="button"
+                role="option"
+                aria-selected={!stale && i === cursor}
+                className={!stale && i === cursor ? "on" : ""}
+                onMouseEnter={() => setCursor(i)}
+                onClick={() => pick(s)}
+              >
+                <span className="code">{s.code_display}</span>
+                <span className="nm">{s.contact_name || s.name || "—"}</span>
+                <span className="hits">{s.mention_count}×</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          // Not a dead end: a search that comes up empty is the one moment
+          // someone is guaranteed to be thinking about the exact Fs number
+          // they need — so hand them straight to adding it rather than
+          // leaving nothing to do but clear the field.
+          <div className="sugg">
+            <div className="sugghead">No matches</div>
+            <Link className="sugg-addnew" to="/stores/new">+ Add “{q.trim()}” as a new store</Link>
+          </div>
+        )}
       </DropdownPortal>
     </div>
   );

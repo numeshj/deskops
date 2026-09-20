@@ -52,6 +52,7 @@ export const api = {
 
   // vocabulary
   workTypes: () => request("GET", "/vocab/work-types"),
+  addWorkType: (label) => request("POST", "/vocab/work-types", { label }),
   unlisted: () => request("GET", "/vocab/unlisted"),
   promote: (id, body) => request("POST", `/vocab/unlisted/${id}/promote`, body),
   dismissCluster: (id) => request("POST", `/vocab/unlisted/${id}/dismiss`),
@@ -60,6 +61,7 @@ export const api = {
   searchStores: (q, limit = 8) =>
     request("GET", `/stores?q=${encodeURIComponent(q || "")}&limit=${limit}`),
   store: (id) => request("GET", `/stores/${id}`),
+  addStore: (body) => request("POST", "/stores", body),
 
   // activities
   save: (body) => request("POST", "/activities", body),

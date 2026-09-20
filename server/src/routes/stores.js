@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { query, one } from "../db/pool.js";
-import { normStore, newId } from "../lib/domain.js";
+import { normStore, displayStore, newId } from "../lib/domain.js";
 
 const r = Router();
 
@@ -76,6 +76,55 @@ r.get("/", async (req, res, next) => {
     );
     res.json({ stores: rows, mode: "search" });
   } catch (err) { next(err); }
+});
+
+/**
+ * Register a new Fs number — a store the wholesaler has taken on that isn't
+ * in the system yet.
+ *
+ * The code is never generated here: Fs numbers come from the wholesaler's
+ * own account system, so whoever is adding this already knows the exact
+ * number. normStore() accepts it in whatever shape it's typed — "Fs612",
+ * "fs 612", "FS0612" — and stores the same canonical form the CSV import
+ * and every existing store already use, so search and matching treat a
+ * hand-added store no differently from one that came from the workbook.
+ */
+r.post("/", async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const canonical = normStore(b.code);
+    if (!canonical) {
+      return res.status(400).json({ error: "invalid_code", hint: "Expected something like Fs335" });
+    }
+
+    const dupe = await one("SELECT store_id, code_display FROM store WHERE code = ?", [canonical]);
+    if (dupe) return res.status(409).json({ error: "already_exists", store_id: dupe.store_id, code_display: dupe.code_display });
+
+    const id = newId();
+    await query(
+      `INSERT INTO store (store_id, code, code_display, name, group_name, status, address_line, postcode, delivery_note)
+       VALUES (?,?,?,?,?,'active',?,?,?)`,
+      [id, canonical, displayStore(canonical), fit(b.name, 160), fit(b.group_name, 120),
+       fit(b.address_line, 200), fit(b.postcode, 16), b.delivery_note ? String(b.delivery_note).trim().slice(0, 2000) || null : null]
+    );
+
+    // An initial contact is optional, but this is the one moment someone is
+    // guaranteed to have the phone number to hand — asking for it later means
+    // asking at all.
+    const contactName = fit(b.contact_name, 80);
+    if (contactName) {
+      await query(
+        `INSERT INTO store_contact (contact_id, store_id, name, role, phone, is_primary)
+         VALUES (?,?,?,?,?,1)`,
+        [newId(), id, contactName, fit(b.contact_role, 40), fit(b.contact_phone, 32)]
+      );
+    }
+
+    res.status(201).json({ store_id: id, code: canonical, code_display: displayStore(canonical) });
+  } catch (err) {
+    if (err.code === "ER_DUP_ENTRY") return res.status(409).json({ error: "already_exists" });
+    next(err);
+  }
 });
 
 /** T18 — the store view: one page, the whole history. */

@@ -49,6 +49,10 @@ export default function CaptureBar({ workTypes, onSaved, onCluster }) {
   const [saving, setSaving] = useState(false);
   const [held, setHeld] = useState(0);
   const [elapsed, setElapsed] = useState(0);
+  const [addingType, setAddingType] = useState(false);
+  const [newTypeLabel, setNewTypeLabel] = useState("");
+  const [addingTypeBusy, setAddingTypeBusy] = useState(false);
+  const newTypeInput = useRef(null);
 
   const started = useRef(0);
   const holdUntil = useRef(0);
@@ -182,6 +186,33 @@ export default function CaptureBar({ workTypes, onSaved, onCluster }) {
       setSaving(false);
     }
   }, [typeId, saving, store, reasonId, otherText, extra, note, followUp, reset, onSaved, onCluster]);
+
+  /* ------------------------------------------------------- new task type */
+
+  /**
+   * A whole new chip in "What happened", not another reason under an
+   * existing one. Open to her the same way adding a reason already is (spec
+   * 6.7) — the desk's work growing a new category is exactly the kind of
+   * thing she notices before anyone else does.
+   */
+  async function addWorkType() {
+    const label = newTypeLabel.trim();
+    if (!label || addingTypeBusy) return;
+    setAddingTypeBusy(true);
+    try {
+      const res = await api.addWorkType(label);
+      window.dispatchEvent(new Event("deskops:vocab-changed"));
+      setTypeId(res.work_type_id);
+      setReasonId(null);
+      setNewTypeLabel("");
+      setAddingType(false);
+      onSaved?.(null, null, null, `"${label}" added — pick it above`);
+    } catch (err) {
+      onSaved?.(null, null, null, err?.data?.error === "already_exists" ? "That already exists" : `Could not add it — ${err.message}`);
+    } finally {
+      setAddingTypeBusy(false);
+    }
+  }
 
   /* --------------------------------------------------------- same again */
 
@@ -336,7 +367,45 @@ export default function CaptureBar({ workTypes, onSaved, onCluster }) {
               <span className="n">{i + 1}</span>
             </button>
           ))}
+          <button
+            type="button"
+            className="chip addnew"
+            onClick={() => {
+              setAddingType((v) => !v);
+              setTimeout(() => newTypeInput.current?.focus(), 0);
+            }}
+          >
+            + New task
+          </button>
         </div>
+
+        {addingType && (
+          <div className="otherrow">
+            <input
+              ref={newTypeInput}
+              className="field"
+              placeholder="Name the new task, e.g. Pallet check"
+              value={newTypeLabel}
+              autoComplete="off"
+              disabled={addingTypeBusy}
+              onChange={(e) => setNewTypeLabel(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); addWorkType(); }
+                if (e.key === "Escape") { e.preventDefault(); setAddingType(false); setNewTypeLabel(""); }
+              }}
+              aria-label="New task type name"
+            />
+            <button type="button" className="btn primary sm" disabled={!newTypeLabel.trim() || addingTypeBusy} onClick={addWorkType}>
+              {addingTypeBusy ? "Adding…" : "Add"}
+            </button>
+            <button type="button" className="btn ghost sm" onClick={() => { setAddingType(false); setNewTypeLabel(""); }}>
+              Cancel
+            </button>
+            <div className="hint">
+              Becomes a chip here immediately, for everyone — captures with just a store and a note.
+            </div>
+          </div>
+        )}
 
         <div className="chiplabel">
           {type ? `Detail — ${type.label.toLowerCase()}` : "Detail"}

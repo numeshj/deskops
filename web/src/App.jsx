@@ -6,6 +6,7 @@ import Capture from "./pages/Capture.jsx";
 import OpenItems from "./pages/OpenItems.jsx";
 import Drafts from "./pages/Drafts.jsx";
 import StoreView from "./pages/StoreView.jsx";
+import AddStore from "./pages/AddStore.jsx";
 import OrderView from "./pages/OrderView.jsx";
 import Stock from "./pages/Stock.jsx";
 import Requests from "./pages/Requests.jsx";
@@ -100,6 +101,7 @@ function Root() {
           <Route path="/requests" element={<Requests toast={toast} />} />
           <Route path="/allocations" element={<Campaigns toast={toast} />} />
           <Route path="/allocations/:id" element={<CampaignView toast={toast} />} />
+          <Route path="/stores/new" element={<AddStore toast={toast} />} />
           <Route path="/stores/:id" element={<StoreView />} />
           <Route path="/orders/:id" element={<OrderView />} />
           <Route path="*" element={<Navigate to="/" replace />} />
