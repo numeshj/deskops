@@ -449,6 +449,63 @@ table.list tr:last-child td { border-bottom: 0; }
 .datenav { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
 .datenav .spannote { color: var(--ink-3); font-size: 12.5px; margin-left: auto; }
 
+/* --- the calendar popover ------------------------------------------------- */
+
+.datepop {
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: var(--r);
+  box-shadow: var(--shadow); padding: 10px; width: 264px;
+}
+.datepop-head {
+  display: flex; align-items: center; justify-content: space-between;
+  font: 600 12.5px/1 var(--display); padding: 2px 4px 10px; color: var(--ink);
+}
+.datepop-head .nav {
+  background: none; border: 0; color: var(--ink-2); cursor: pointer;
+  font-size: 15px; line-height: 1; padding: 4px 8px; border-radius: 7px;
+}
+.datepop-head .nav:hover { background: var(--surface-2); color: var(--ink); }
+
+.datepop-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.datepop-grid.dow {
+  margin-bottom: 4px; font: 600 10px/1 var(--display); letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.datepop-grid.dow span { text-align: center; padding: 4px 0; }
+
+.datepop-grid button {
+  aspect-ratio: 1; width: 100%; background: none; border: 0; border-radius: 8px;
+  color: var(--ink); font: 500 12.5px/1 var(--body); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; position: relative;
+}
+.datepop-grid button:hover:not(:disabled) { background: var(--surface-2); }
+.datepop-grid button:disabled { color: var(--line-2); cursor: default; }
+.datepop-grid button.out { color: var(--ink-3); opacity: 0.5; }
+.datepop-grid button.today { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.datepop-grid button.sel { background: var(--accent); border-color: var(--accent); color: #fff; }
+:root[data-theme="dark"] .datepop-grid button.sel { color: #06201d; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .datepop-grid button.sel { color: #06201d; }
+}
+
+/* The dot is the whole point of a custom picker over a native one — it says
+   where the records actually are instead of making her guess or step
+   through one day at a time. */
+.datepop-grid button.hasdata::after {
+  content: ""; position: absolute; bottom: 3px; width: 4px; height: 4px;
+  border-radius: 50%; background: var(--accent);
+}
+.datepop-grid button.sel.hasdata::after { background: #fff; }
+:root[data-theme="dark"] .datepop-grid button.sel.hasdata::after { background: #06201d; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .datepop-grid button.sel.hasdata::after { background: #06201d; }
+}
+
+.datepop-legend {
+  display: flex; align-items: center; gap: 6px; margin-top: 8px; padding-top: 8px;
+  border-top: 1px solid var(--line); font-size: 11px; color: var(--ink-3);
+}
+.datepop-legend .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+
 /* An empty window has to look different from a broken one, so this reads as a
    statement rather than as the absence of a chart. */
 .card.nothinghere { padding: 16px; margin-bottom: 14px; border-style: dashed; }

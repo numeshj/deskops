@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api.js";
 import { Figure, Bars, HBars, GroupedBars, Lines, Stat, Table, fmt } from "../components/Charts.jsx";
+import DatePicker from "../components/DatePicker.jsx";
 
 /**
  * Section 8 — the dashboard. Day, week, month.
@@ -69,6 +70,14 @@ export default function Dashboard({ toast }) {
   const [anchor, setAnchor] = useState(null);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Every day that holds a record, fetched once. Backs the calendar's dots —
+  // without it every date looks equally worth trying, and a genuinely empty
+  // weekend is indistinguishable from a broken one.
+  const [activeDays, setActiveDays] = useState(null);
+
+  useEffect(() => {
+    api.activeDays().then((r) => setActiveDays(new Set(r.days))).catch(() => {});
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -147,6 +156,14 @@ export default function Dashboard({ toast }) {
               Back to today
             </button>
           )}
+          <DatePicker
+            value={here}
+            today={today}
+            onSelect={goTo}
+            activeDays={activeDays}
+            min={span?.earliest}
+            max={today}
+          />
           {span?.earliest && (
             <span className="spannote">
               Records run {pretty(span.earliest)} to {pretty(span.latest)}

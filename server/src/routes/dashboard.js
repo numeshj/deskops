@@ -474,6 +474,28 @@ async function month(from, to) {
 
 /* ------------------------------------------------------------------ routes */
 
+/**
+ * Every distinct day that holds a real (non-draft) record.
+ *
+ * Backs the calendar picker: without this, jumping straight to an arbitrary
+ * date is a guess — the desk works Monday to Friday, so most weekends and
+ * plenty of gaps in between are genuinely empty, not broken. A plain
+ * DISTINCT DATE(...) over the whole table is cheap at this scale (a few
+ * hundred days over ~20 months of history) and needs no date-range
+ * parameter — the frontend fetches it once and keeps it in memory.
+ *
+ * Registered before "/:period" — Express would otherwise try to match
+ * "active-days" as a period and reject it.
+ */
+r.get("/active-days", async (_req, res, next) => {
+  try {
+    const rows = await query(
+      "SELECT DISTINCT DATE(occurred_at) AS d FROM activity WHERE is_draft = 0 ORDER BY d"
+    );
+    res.json({ days: rows.map((row) => String(row.d)) });
+  } catch (err) { next(err); }
+});
+
 r.get("/:period", async (req, res, next) => {
   try {
     const period = ["day", "week", "month"].includes(req.params.period) ? req.params.period : null;

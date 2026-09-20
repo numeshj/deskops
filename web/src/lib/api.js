@@ -107,6 +107,7 @@ export const api = {
   // dashboard and impact
   dashboard: (period, date) =>
     request("GET", `/dashboard/${period}${date ? `?date=${date}` : ""}`),
+  activeDays: () => request("GET", "/dashboard/active-days"),
   impact: (minutes) => {
     const qs = new URLSearchParams();
     for (const [k, v] of Object.entries(minutes || {})) qs.set(`m_${k}`, String(v));
