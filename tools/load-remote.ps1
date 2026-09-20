@@ -105,6 +105,63 @@ if ($isTidb) {
   $isTidb = $a -match "^y"
 }
 
+# Aiven signs with its own per-project CA, which is not in Node's default
+# trust store — connecting fails as "self-signed certificate in certificate
+# chain" without it. pool.js (used by every step below) picks up
+# server\certs\aiven-ca.pem automatically when it exists; the probe below
+# needs the same CA to test the connection honestly instead of just
+# disabling verification.
+$isAiven = $dbHost -match "aivencloud\.com"
+$caPath = Join-Path $Server "certs\aiven-ca.pem"
+if ($isAiven -and -not (Test-Path $caPath)) {
+  Say "Fetching Aiven's project CA certificate so the connection can be verified properly..."
+  $fetcher = Join-Path $Server "deskops-fetch-ca.mjs"
+  @'
+import mysql from "mysql2/promise";
+import fs from "node:fs";
+import path from "node:path";
+
+const c = await mysql.createConnection({
+  host: process.env.DB_HOST,
+  port: Number(process.env.DB_PORT),
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  ssl: { minVersion: "TLSv1.2", rejectUnauthorized: false },
+  connectTimeout: 20000,
+});
+let cert = c.connection.stream.getPeerCertificate(true);
+let chain = [];
+const seen = new Set();
+while (cert && cert.raw && !seen.has(cert.fingerprint256)) {
+  seen.add(cert.fingerprint256);
+  chain.push(cert);
+  if (cert.issuerCertificate && cert.issuerCertificate.fingerprint256 !== cert.fingerprint256) {
+    cert = cert.issuerCertificate;
+  } else break;
+}
+const root = chain[chain.length - 1];
+const pem = "-----BEGIN CERTIFICATE-----\n" +
+  root.raw.toString("base64").match(/.{1,64}/g).join("\n") +
+  "\n-----END CERTIFICATE-----\n";
+// Run with cwd = server\ (the caller Push-Location's there), so this lands
+// at server\certs\aiven-ca.pem, matching where pool.js looks for it.
+const outDir = path.resolve("certs");
+fs.mkdirSync(outDir, { recursive: true });
+fs.writeFileSync(path.join(outDir, "aiven-ca.pem"), pem);
+console.log("OK");
+await c.end();
+'@ | Set-Content -Path $fetcher -Encoding ASCII
+
+  Push-Location $Server
+  & $NodeExe $fetcher 2>&1 | Out-Null
+  $fetchOk = $LASTEXITCODE -eq 0 -and (Test-Path $caPath)
+  Pop-Location
+  Remove-Item $fetcher -Force -ErrorAction SilentlyContinue
+
+  if ($fetchOk) { Ok "Saved server\certs\aiven-ca.pem." }
+  else { Warn "Could not fetch it automatically; the connection test below will explain why." }
+}
+
 # Everything below inherits these.
 $env:DB_HOST     = $dbHost
 $env:DB_PORT     = $dbPort
@@ -129,11 +186,23 @@ $probe = Join-Path $Server "deskops-probe.mjs"
 # backticks and ${...} below reach Node exactly as written.
 @'
 import mysql from "mysql2/promise";
+import fs from "node:fs";
+import path from "node:path";
 
 const name = process.env.DB_NAME || "";
 if (!/^[A-Za-z0-9_]+$/.test(name)) {
   console.log("FAIL|BAD_NAME|A database name may only contain letters, numbers and underscores.");
   process.exit(0);
+}
+
+// Same pinned-CA logic as server/src/db/pool.js: use the committed Aiven
+// project CA when present, otherwise fall back to the default trust store
+// (which is correct for TiDB and most other hosts).
+function sslConfig() {
+  if (process.env.DB_SSL !== "1") return undefined;
+  const caPath = path.resolve("certs/aiven-ca.pem");
+  const ca = fs.existsSync(caPath) ? fs.readFileSync(caPath, "utf8") : undefined;
+  return { minVersion: "TLSv1.2", ca };
 }
 
 // Connect with NO database selected. A database that does not exist yet is
@@ -144,7 +213,7 @@ const cfg = {
   port: Number(process.env.DB_PORT),
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
-  ssl: process.env.DB_SSL === "1" ? { minVersion: "TLSv1.2" } : undefined,
+  ssl: sslConfig(),
   connectTimeout: 20000,
 };
 

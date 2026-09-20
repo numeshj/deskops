@@ -100,19 +100,61 @@ is part of what keeps you inside the free allowance.
 *Free tiers move. Everything in this section was re-checked on 20 September
 2026, and the date matters: Render cut its free plan earlier that month.*
 
-### Database — TiDB Cloud Starter
+### Database — Aiven free MySQL
+
+[Aiven's free plan](https://aiven.io/free-mysql-database) is the one this
+deploys against: **1 GB, no card, real MySQL, daily backups.** That last part
+is the deciding factor. Once this goes live the spreadsheet gets retired, and
+this database becomes the only copy of 20 months of the order desk's history —
+every store, every contact, every issue. A free tier with no backup story is
+not somewhere to put that.
+
+It is also plain MySQL, not a wire-compatible cousin, so the foreign keys stay
+on. The database itself catches a bad reference instead of the app having to
+be trusted to — one less class of thing that can go wrong on a system nobody
+is watching daily.
+
+1 GB against 5.3 MB of data is a limit you can see coming, unlike a monthly
+request-unit meter you can only watch. Running out of disk gets you a warning;
+running out of an opaque quota gets you a dead connection mid-month.
+
+The honest costs, stated plainly: 1 GB instead of 5, no SLA, one service per
+account, and Aiven powers off free services with no continuing activity. That
+last one sounds worse than it is — a desk used every weekday counts as
+continuing activity, Aiven warns before deactivating, and the service comes
+back on request.
+
+Sign up at aiven.io/free-mysql-database and create a free MySQL service — pick
+an EU region if the client is in the UK/EU, to match Render's Frankfurt region
+below. Take the connection details from the service overview page:
+
+```
+DB_HOST=<service>-<project>.aivencloud.com
+DB_PORT=<given>
+DB_USER=avnadmin
+DB_PASSWORD=<generated>
+DB_NAME=defaultdb        # every Aiven service ships this database regardless
+                          # of what you named the service itself
+DB_SSL=1
+```
+
+**TLS needs Aiven's own CA, not the public trust store.** Aiven signs with a
+per-project CA, so a strict client rejects it as "self-signed certificate in
+certificate chain" by default. `server/certs/aiven-ca.pem` is committed for
+this deployment's project — `pool.js` and `load-remote.ps1` both pick it up
+automatically whenever `DB_SSL=1`, verifying the connection properly rather
+than disabling verification. `load-remote.bat` fetches this file itself the
+first time it talks to an `aivencloud.com` host, if it isn't already there.
+
+### Alternative — TiDB Cloud Starter
 
 [TiDB Cloud Starter](https://docs.pingcap.com/tidbcloud/select-cluster-tier/)
-remains the strongest permanently-free option: **5 GiB of row storage, 5 GiB
-columnar, 50 million request units a month, no credit card**, and up to five
-free instances per organisation. It is MySQL wire-compatible, so this code runs
-unchanged.
-
-Against our numbers: 5.3 MB of data in 5 GiB, and roughly 40 records a day
-against a 50-million-unit monthly allowance. There is no realistic path to the
-limit.
-
-Take the connection details from the cluster's Connect dialog:
+is bigger — 5 GiB storage, 50 million request units a month — but two things
+push it to second choice: its free-tier docs don't mention backups anywhere,
+and it's only MySQL *wire-compatible*, which meant dropping foreign keys
+(`db/002_tidb_compat.sql`, via `MIGRATE_INCLUDE=tidb_compat`) rather than
+having the database enforce them. `load-remote.bat` still handles it — it
+sets that flag automatically when the host matches `tidbcloud.com`.
 
 ```
 DB_HOST=gateway01.<region>.prod.aws.tidbcloud.com
@@ -123,28 +165,9 @@ DB_NAME=deskops
 DB_SSL=1
 ```
 
-**The foreign keys come out on TiDB.** Its FOREIGN KEY support has been through
-several stages and behaves differently from InnoDB's, and nothing here relies
-on database-level enforcement — the importer filters invalid references before
-inserting, and the API resolves every referenced row inside the same
-transaction. `db/002_tidb_compat.sql` drops them. It never runs by accident:
-
-```
-MIGRATE_INCLUDE=tidb_compat
-```
-
-`load-remote.bat` sets that for you when the host looks like TiDB. On MySQL or
-MariaDB, leave it alone — the constraints cost nothing and catch mistakes.
-
 **If you hit the monthly quota**, TiDB denies new connections until the month
-resets. At 40 records a day you will not, but it is the failure mode to know.
-
-### Alternative — Aiven free MySQL
-
-[Aiven's free plan](https://aiven.io/free-mysql-database) is also perpetual:
-1 GB, no card, daily backups. Smaller, and it powers off after a period of
-inactivity, but it is plain MySQL, so skip the compat step. A reasonable
-second choice.
+resets — the order desk down mid-month with nothing to do but wait. At 40
+records a day this is unlikely, but it's the failure mode to know.
 
 Avoid `db4free` and similar — unreliable, no backups.
 
@@ -211,22 +234,24 @@ from the machine that already holds the CSVs, straight into the hosted
 database.
 
 On Windows, double-click **`load-remote.bat`**. It asks for the connection
-details, tests them before changing anything, creates the database if it is
-not there, applies the schema (adding the TiDB step when the host is TiDB),
-asks for the two account passwords without echoing them, and loads the
-workbook. It uses the portable Node in `runtime\`, so nothing needs
-installing, and it writes no passwords to disk.
+details, fetches and pins Aiven's CA certificate on first use, tests the
+connection before changing anything, creates the database if it is not there,
+applies the schema (adding the TiDB step only when the host is TiDB), asks for
+the two account passwords without echoing them, and loads the workbook. It
+uses the portable Node in `runtime\`, so nothing needs installing, and it
+writes no passwords to disk.
 
-Or by hand, if you have Node:
+Or by hand, if you have Node — on Aiven:
 
 ```bash
 cd server
-DB_HOST=<host> DB_PORT=4000 DB_USER=<user> DB_PASSWORD=<pw> \
-DB_NAME=deskops DB_SSL=1 DB_POOL=3 NODE_ENV=production \
-MIGRATE_INCLUDE=tidb_compat \
+DB_HOST=<host> DB_PORT=<port> DB_USER=avnadmin DB_PASSWORD=<pw> \
+DB_NAME=defaultdb DB_SSL=1 DB_POOL=3 NODE_ENV=production \
 SEED_USER_PASSWORD=<pw> SEED_ADMIN_PASSWORD=<pw> \
   node src/db/migrate.js && node src/db/seedUsers.js && node src/import.js ../migrated
 ```
+
+On TiDB, add `MIGRATE_INCLUDE=tidb_compat` and use `DB_NAME=deskops`.
 
 13,000 rows over the internet — a couple of minutes. The import is idempotent:
 ids are a hash of each row's source identity, so running it twice updates
@@ -303,8 +328,9 @@ prerequisite for launching.
 |---|---|---|
 | `PORT` | `4000` | Free hosts set this — never hard-code it |
 | `NODE_ENV` | — | `production` when deployed |
-| `DB_HOST` `DB_PORT` `DB_USER` `DB_PASSWORD` `DB_NAME` | — | From your provider |
+| `DB_HOST` `DB_PORT` `DB_USER` `DB_PASSWORD` `DB_NAME` | — | From your provider. On Aiven, `DB_NAME` is `defaultdb` |
 | `DB_SSL` | off | **`1` on any hosted database** |
+| `DB_SSL_CA` | `server/certs/aiven-ca.pem` if present | Path to a pinned CA cert; only needed if Aiven ever rotates its project CA |
 | `DB_POOL` | `5` | Leave alone on a free tier |
 | `JWT_SECRET` | dev value | **Must change.** Render generates it |
 | `SERVE_WEB` | `1` | `0` to run the API alone (local Vite dev) |

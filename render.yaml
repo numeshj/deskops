@@ -29,9 +29,12 @@ services:
       - key: DB_PASSWORD
         sync: false
       - key: DB_NAME
-        sync: false
+        sync: false               # "defaultdb" on Aiven — it names the database, not the service
       - key: DB_SSL
         value: "1"               # every hosted free MySQL requires TLS
+        # Aiven signs with its own per-project CA. pool.js picks up the
+        # pinned copy at server/certs/aiven-ca.pem automatically — no
+        # extra env var needed unless that CA is ever rotated.
 
       # The two sign-in passwords. sync:false means Render asks for them when
       # the blueprint is created rather than storing them in this file, which

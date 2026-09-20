@@ -1,10 +1,26 @@
 import mysql from "mysql2/promise";
 import dotenv from "dotenv";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(here, "../../.env") });
+
+/**
+ * TiDB and most hosts use a publicly-trusted CA, so the default trust store
+ * is enough. Aiven signs with its own per-project CA instead, which is not
+ * in that store — connecting without it fails as "self-signed certificate
+ * in certificate chain". DB_SSL_CA points at a pinned copy (committed at
+ * certs/aiven-ca.pem for this deployment's Aiven project); when it is unset
+ * or the file is missing, we fall back to the default trust store.
+ */
+function sslConfig() {
+  if (process.env.DB_SSL !== "1") return undefined;
+  const caPath = process.env.DB_SSL_CA || path.resolve(here, "../../certs/aiven-ca.pem");
+  const ca = fs.existsSync(caPath) ? fs.readFileSync(caPath, "utf8") : undefined;
+  return { minVersion: "TLSv1.2", ca };
+}
 
 /**
  * One pool for the whole process.
@@ -22,10 +38,9 @@ export const pool = mysql.createPool({
   database: process.env.DB_NAME || "deskops",
   socketPath: process.env.DB_SOCKET || undefined,
 
-  // Every hosted free MySQL (Aiven, TiDB, Clever Cloud) requires TLS. Their
-  // certs are publicly trusted, so the default CA store is enough — we never
-  // disable verification.
-  ssl: process.env.DB_SSL === "1" ? { minVersion: "TLSv1.2" } : undefined,
+  // Every hosted free MySQL (Aiven, TiDB, Clever Cloud) requires TLS. We
+  // never disable certificate verification — see sslConfig() above.
+  ssl: sslConfig(),
 
   waitForConnections: true,
 
