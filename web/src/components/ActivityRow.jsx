@@ -25,7 +25,11 @@ export default function ActivityRow({ a, showDate, onResolve, isNew }) {
   if (a.related_order_number) bits.push(`2p ${a.related_order_number}`);
   if (a.detail?.carrier) bits.push(a.detail.carrier);
   if (a.detail?.units) bits.push(`${a.detail.units} units`);
-  if (a.detail?.amount != null) bits.push(`£${(a.detail.amount / 100).toFixed(2)}`);
+  // Both names: imported records carry amount_pence, and records saved before
+  // the two were reconciled carry amount. Reading only one hid the value on
+  // every credit that came from the workbook.
+  const pence = a.detail?.amount_pence ?? a.detail?.amount;
+  if (pence != null) bits.push(`£${(Number(pence) / 100).toFixed(2)}`);
   if (a.detail?.product) bits.push(a.detail.product);
   if (a.detail?.advised_by) bits.push(`advised by ${a.detail.advised_by}`);
   if (a.note) bits.push(a.note);

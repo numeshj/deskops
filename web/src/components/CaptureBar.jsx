@@ -21,7 +21,10 @@ const FIELD_SPECS = {
   related_order: { key: "related_order_number", label: "2p order", ph: "11124766", mono: true },
   carrier: { key: "carrier", label: "Carrier", options: ["DPD", "DX", "Evri"] },
   qty: { key: "units", label: "Units", ph: "5", mono: true },
-  amount: { key: "amount", label: "Credit £", ph: "21.38", mono: true },
+  // key is amount_pence, not amount: the value below is multiplied by 100 before
+  // it is sent, and a field called "amount" holding 2138 is how a £21.38 credit
+  // ends up read as £2,138 by the next person to touch this.
+  amount: { key: "amount_pence", label: "Credit £", ph: "21.38", mono: true },
   product: { key: "product", label: "Product", ph: "SKE Bar 600 Prefilled Pods", wide: true },
 };
 
@@ -138,7 +141,7 @@ export default function CaptureBar({ workTypes, onSaved, onCluster }) {
       const v = extra[f.key];
       if (v == null || v === "") continue;
       if (f.key === "order_number" || f.key === "related_order_number") continue;
-      detail[f.key] = f.key === "amount" ? Math.round(Number(v) * 100) : v;
+      detail[f.key] = f.key === "amount_pence" ? Math.round(Number(v) * 100) : v;
     }
 
     const payload = {

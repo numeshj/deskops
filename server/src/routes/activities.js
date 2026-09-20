@@ -10,6 +10,30 @@ const CHANNELS = new Set([
   "call_3cx", "call_cloudtalk", "whatsapp", "email_yash", "email_mfg", "in_person", "system", "",
 ]);
 
+/**
+ * One name for the credit amount, settled here.
+ *
+ * The importer wrote detail.amount_pence; the capture screen sent detail.amount
+ * (also in pence, just differently named); the dashboard summed only
+ * amount_pence. The visible effect was that every credit logged in the app
+ * added exactly £0.00 to the month's credit value, while the figure still
+ * looked plausible because 25 imported records were carrying it.
+ *
+ * Nothing warned about it. A key that is simply absent sums to zero, and a
+ * credit total that is a little low looks like a quiet month.
+ *
+ * Normalising on the way in means the database holds one name from now on.
+ * amount_pence wins because it says what the unit is; a field called "amount"
+ * holding 2138 is how this class of bug starts.
+ */
+function normaliseDetail(detail) {
+  if (!detail || typeof detail !== "object" || Array.isArray(detail)) return detail;
+  if (detail.amount == null) return detail;
+  const { amount, ...rest } = detail;
+  // Both clients send pence already - this is a rename, not a conversion.
+  return { ...rest, amount_pence: rest.amount_pence ?? amount };
+}
+
 /* ------------------------------------------------------------------ helpers */
 
 const SELECT_ACTIVITY = `
@@ -239,7 +263,7 @@ r.post("/", async (req, res, next) => {
           CHANNELS.has(b.channel) ? b.channel : "",
           b.direction === "in" || b.direction === "out" ? b.direction : "",
           fit(b.note, 60000),
-          b.detail ? JSON.stringify(b.detail) : null,
+          b.detail ? JSON.stringify(normaliseDetail(b.detail)) : null,
           status,
           followUp ? 1 : 0,
           b.follow_up_due || null,
@@ -370,7 +394,7 @@ r.patch("/:id", async (req, res, next) => {
     }
     if ("follow_up" in b) { sets.push("follow_up = ?"); args.push(b.follow_up ? 1 : 0); }
     if ("is_draft" in b) { sets.push("is_draft = ?"); args.push(b.is_draft ? 1 : 0); }
-    if ("detail" in b) { sets.push("detail = ?"); args.push(JSON.stringify(b.detail)); }
+    if ("detail" in b) { sets.push("detail = ?"); args.push(JSON.stringify(normaliseDetail(b.detail))); }
     if (b.order_number !== undefined) {
       const conn = await pool.getConnection();
       try {
