@@ -271,7 +271,8 @@ label.lbl {
 .storebox { position: relative; flex: 0 0 232px; min-width: 190px; }
 
 .sugg {
-  position: absolute; z-index: 40; top: calc(100% + 5px); left: 0; right: 0;
+  /* Positioning (top/left/width/z-index) lives on DropdownPortal's wrapper
+     now, not here — see components/DropdownPortal.jsx for why. */
   background: var(--surface); border: 1px solid var(--line-2); border-radius: var(--r);
   box-shadow: var(--shadow); max-height: 256px; overflow: auto; padding: 4px;
 }

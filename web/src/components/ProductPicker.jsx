@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api.js";
+import DropdownPortal from "./DropdownPortal.jsx";
 
 /**
  * Product lookup for request lines and the campaign grid.
@@ -19,6 +20,7 @@ export default function ProductPicker({ onPick, placeholder = "Product or free t
   const [open, setOpen] = useState(false);
   const [cursor, setCursor] = useState(-1);
   const box = useRef(null);
+  const portal = useRef(null);
   const timer = useRef(null);
   const latest = useRef("");
   const input = useRef(null);
@@ -44,7 +46,11 @@ export default function ProductPicker({ onPick, placeholder = "Product or free t
   }, [q, open, load]);
 
   useEffect(() => {
-    const away = (e) => { if (box.current && !box.current.contains(e.target)) setOpen(false); };
+    const away = (e) => {
+      const inBox = box.current && box.current.contains(e.target);
+      const inPortal = portal.current && portal.current.contains(e.target);
+      if (!inBox && !inPortal) setOpen(false);
+    };
     document.addEventListener("mousedown", away);
     return () => document.removeEventListener("mousedown", away);
   }, []);
@@ -91,7 +97,7 @@ export default function ProductPicker({ onPick, placeholder = "Product or free t
         onFocus={() => setOpen(true)}
         onKeyDown={keyDown}
       />
-      {open && rows.length > 0 && (
+      <DropdownPortal anchorRef={box} portalRef={portal} open={open && rows.length > 0}>
         <div className={`sugg${stale ? " stale" : ""}`} role="listbox" aria-busy={stale}>
           {rows.map((p, i) => (
             <button
@@ -113,7 +119,7 @@ export default function ProductPicker({ onPick, placeholder = "Product or free t
             </button>
           )}
         </div>
-      )}
+      </DropdownPortal>
     </div>
   );
 }

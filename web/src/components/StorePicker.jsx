@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { api } from "../lib/api.js";
+import DropdownPortal from "./DropdownPortal.jsx";
 
 /**
  * T6 — store picker.
@@ -18,6 +19,7 @@ export default function StorePicker({ value, onChange, onPicked, inputRef, disab
   const [open, setOpen] = useState(false);
   const [cursor, setCursor] = useState(-1);
   const box = useRef(null);
+  const portal = useRef(null);
   const timer = useRef(null);
   const localRef = useRef(null);
   const ref = inputRef || localRef;
@@ -50,7 +52,9 @@ export default function StorePicker({ value, onChange, onPicked, inputRef, disab
 
   useEffect(() => {
     const away = (e) => {
-      if (box.current && !box.current.contains(e.target)) setOpen(false);
+      const inBox = box.current && box.current.contains(e.target);
+      const inPortal = portal.current && portal.current.contains(e.target);
+      if (!inBox && !inPortal) setOpen(false);
     };
     document.addEventListener("mousedown", away);
     return () => document.removeEventListener("mousedown", away);
@@ -135,7 +139,7 @@ export default function StorePicker({ value, onChange, onPicked, inputRef, disab
         aria-autocomplete="list"
       />
 
-      {open && rows.length > 0 && (
+      <DropdownPortal anchorRef={box} portalRef={portal} open={open && rows.length > 0}>
         <div className={`sugg${stale ? " stale" : ""}`} role="listbox" aria-busy={stale}>
           {!q && <div className="sugghead">Recent</div>}
           {rows.map((s, i) => (
@@ -154,7 +158,7 @@ export default function StorePicker({ value, onChange, onPicked, inputRef, disab
             </button>
           ))}
         </div>
-      )}
+      </DropdownPortal>
     </div>
   );
 }
