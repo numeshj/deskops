@@ -204,8 +204,18 @@ async function day(from, to) {
      GROUP BY HOUR(occurred_at) ORDER BY hour
   `);
   const byHour = new Map(hours.map((h) => [Number(h.hour), n(h.n)]));
+
+  // The desk day is 07:00-19:00, so that is the window worth drawing - but it
+  // is the DEFAULT, not the limit. Hard-coding 7..19 meant a record logged at
+  // 06:40 or 20:15 vanished from the chart while still being counted in the
+  // headline above it, so the picture contradicted the number and neither
+  // explained itself. Widen to whatever the day actually holds.
+  const logged = [...byHour.keys()].filter((h) => byHour.get(h) > 0);
+  const lo = Math.min(7, ...(logged.length ? logged : [7]));
+  const hi = Math.max(19, ...(logged.length ? logged : [19]));
+
   const timeline = [];
-  for (let h = 7; h <= 19; h += 1) timeline.push({ hour: h, n: byHour.get(h) || 0 });
+  for (let h = lo; h <= hi; h += 1) timeline.push({ hour: h, n: byHour.get(h) || 0 });
 
   const [oos] = await query(
     `SELECT COUNT(*) AS n FROM stock_oos WHERE on_date BETWEEN ${from} AND ${to}`
@@ -373,9 +383,17 @@ async function month(from, to) {
      WHERE work_type_id = 'issue' AND DATE(occurred_at) BETWEEN ${from} AND ${to} AND is_draft = 0
   `);
 
+  // Reads BOTH names. The API now normalises new records onto amount_pence, but
+  // any credit already saved under the old "amount" key would otherwise stay
+  // invisible in this total for ever - and a missing key sums to zero without
+  // complaining, so nobody would notice the money was missing.
   const [credit] = await query(`
     SELECT COUNT(*) AS n,
-           SUM(COALESCE(JSON_EXTRACT(detail, '$.amount_pence'), 0)) AS pence
+           SUM(COALESCE(
+             JSON_EXTRACT(detail, '$.amount_pence'),
+             JSON_EXTRACT(detail, '$.amount'),
+             0
+           )) AS pence
       FROM activity
      WHERE work_type_id = 'credit' AND DATE(occurred_at) BETWEEN ${from} AND ${to} AND is_draft = 0
   `);
