@@ -3,22 +3,44 @@ import dotenv from "dotenv";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { AIVEN_CA } from "./aivenCa.js";
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(here, "../../.env") });
+/**
+ * Only for local dev / Docker, where a .env file may sit next to the repo.
+ * Netlify's function bundler (esbuild) flattens every module into one file,
+ * and import.meta.url — the usual way to find a path relative to this file —
+ * comes out undefined in that bundle rather than a real URL, so anything
+ * built from it throws before the function can handle a single request. This
+ * is wrapped so a bundler quirk here can never take the whole app down; on
+ * Netlify the platform injects env vars directly, so there is no .env to
+ * find anyway.
+ */
+try {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  dotenv.config({ path: path.resolve(here, "../../.env") });
+} catch {
+  /* bundled or otherwise can't self-locate — nothing to load, nothing lost */
+}
 
 /**
  * TiDB and most hosts use a publicly-trusted CA, so the default trust store
  * is enough. Aiven signs with its own per-project CA instead, which is not
  * in that store — connecting without it fails as "self-signed certificate
- * in certificate chain". DB_SSL_CA points at a pinned copy (committed at
- * certs/aiven-ca.pem for this deployment's Aiven project); when it is unset
- * or the file is missing, we fall back to the default trust store.
+ * in certificate chain". AIVEN_CA (aivenCa.js) is the pinned copy for this
+ * deployment's Aiven project, inlined as a JS string rather than read from
+ * certs/aiven-ca.pem so it survives bundling. DB_SSL_CA can still point at a
+ * different file on disk if that's ever needed.
  */
 function sslConfig() {
   if (process.env.DB_SSL !== "1") return undefined;
-  const caPath = process.env.DB_SSL_CA || path.resolve(here, "../../certs/aiven-ca.pem");
-  const ca = fs.existsSync(caPath) ? fs.readFileSync(caPath, "utf8") : undefined;
+  let ca = AIVEN_CA;
+  if (process.env.DB_SSL_CA) {
+    try {
+      ca = fs.readFileSync(process.env.DB_SSL_CA, "utf8");
+    } catch {
+      /* fall back to the inlined default below */
+    }
+  }
   return { minVersion: "TLSv1.2", ca };
 }
 

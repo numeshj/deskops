@@ -1,0 +1,42 @@
+/**
+ * Aiven's per-project CA cert, inlined as a string rather than read from
+ * server/certs/aiven-ca.pem at runtime.
+ *
+ * Netlify's function bundler (esbuild) flattens every imported module into
+ * one file, and `import.meta.url` — the only way to locate a file relative
+ * to its own module — comes out undefined in that bundle rather than a real
+ * URL. Any path built from it (`path.dirname(fileURLToPath(import.meta.url))`)
+ * crashed the whole function before a single request could be handled. A
+ * plain JS export has no such problem: it is just data, identical under
+ * Docker, local dev, and any bundler.
+ *
+ * Not a secret — this is the public half of a TLS certificate. If Aiven ever
+ * rotates this project's CA, regenerate it (see DEPLOYING.md, "TLS needs
+ * Aiven's own CA") and update both this file and certs/aiven-ca.pem together.
+ */
+export const AIVEN_CA = `-----BEGIN CERTIFICATE-----
+MIIERDCCAqygAwIBAgIUAdikByKIV/Cjp8QWp4P3xXraqpMwDQYJKoZIhvcNAQEM
+BQAwOjE4MDYGA1UEAwwvZDBlN2JlODUtM2QwNC00ZTE5LWI4ODQtNzdiNzg0YmRl
+MDg0IFByb2plY3QgQ0EwHhcNMjYwOTIwMTUwMzEwWhcNMzYwOTE3MTUwMzEwWjA6
+MTgwNgYDVQQDDC9kMGU3YmU4NS0zZDA0LTRlMTktYjg4NC03N2I3ODRiZGUwODQg
+UHJvamVjdCBDQTCCAaIwDQYJKoZIhvcNAQEBBQADggGPADCCAYoCggGBALbRxA1d
+eSnj33UIaC5mch4NVG2qV8CnrAQg5qEqF2yiPeZWQyr5C8RBP4RNZ99qurLmFy3I
+9c6drvSCs4tGXg4uK/CN1Fni5iz/NqKZf/pIszOd5EPNlLuRx2kebL//ab6gY33B
+zk8uDbKEmCPMeeJvQIxH4OPspsBeQObOg9psHV+/xNE3v1cQqtjKLKv0iGyX5Tix
+TauQ9A/I6AoB371OFgs0ctbcspDYcn5F2NbUeJx6yivLRaCiJQVwV+d/FSC8/eYT
+lLf9wgeiY6jxQHseJovv71y+FzILRae+BtKzlXIR4dQgOltveR+8/+RdqSeBR1kh
+sb/oEP4EX38yj6pHcw7UMGof1Pl0/pkeovRy0mSED9/0UXnCyzWBhcpkkMXabs2a
+Kbk6gemGlOhLAPjTxNtqwqIFSEXOdxsQlfi/rPsF/yuMNsGdJgVoNafaxPuEFTRq
+Z9dgbF7Vc7NcYIQwJH+G+HFzabmI4HyXsBF/eA5MsnlfR9D4V/7Ct9uadQIDAQAB
+o0IwQDAdBgNVHQ4EFgQUwzwWtMp5S4d8hhMiEuytISpLSz4wEgYDVR0TAQH/BAgw
+BgEB/wIBADALBgNVHQ8EBAMCAQYwDQYJKoZIhvcNAQEMBQADggGBAKRjhnIqSZD3
++sjR/7Wa+OMPklZgkfy8AO6p6Ojnl9xWBIdGypjQBE+B9tpsxNaYifgUCP8L10yn
+ewudjEGVD1j/XJJMxcSrJQrHYeAizeuGUVydCodXrSsEb85Ebh4cIsgxf23wVq2f
+iwDH+lTUAZiq3+OncH9nowgMlPFOMquUvtGxtfjgzvfXlFEqrnwXcEZoyPqIhqzU
+gZGhJ126mPM0esXZg9jVCCrDWLNUfkyhRL5Wl8Q68hhVjUeDapUdxnKzB3t0QTlh
+wGnqmdBQ2QaiDjjsksrHa9MkSJj5Y69JTBS/BunfO8zjFzAuAq3ZUe65vrRcaP/D
+ubwACIJuuplvnX+S0biG2YU496fjnMW0pWJHVFfVX3iAn4e214DY5UnJkgQhV1OU
+BX1994suY3yvGf/r3+H3iYsfe91xmV8rNXjgzxkciJhI4JWqddVFReUrca6c+/H2
+DAGBc/QLpRr7uAqX49r1JvV4xtEeXl60uXwm3pruNGfT+L8KT7uPNQ==
+-----END CERTIFICATE-----
+`;

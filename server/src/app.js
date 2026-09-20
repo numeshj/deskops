@@ -20,8 +20,20 @@ import dashboard from "./routes/dashboard.js";
 import impact from "./routes/impact.js";
 import { onActivity as activityAttachments, onFile as attachmentFiles } from "./routes/attachments.js";
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(here, "../.env") });
+// Bundler-safe self-location. Netlify's function bundler (esbuild) flattens
+// every module into one file, and import.meta.url comes out undefined in
+// that bundle rather than a real URL — anything built from it threw before
+// the function could handle a single request. `here` stays null there; both
+// uses below (loading a local .env, and finding web/dist to serve) are
+// no-ops on Netlify anyway, since it injects env vars directly and serves
+// web/dist from its own CDN instead of through this app (see SERVE_WEB).
+let here = null;
+try {
+  here = path.dirname(fileURLToPath(import.meta.url));
+  dotenv.config({ path: path.resolve(here, "../.env") });
+} catch {
+  /* bundled or otherwise can't self-locate — nothing to load, nothing lost */
+}
 
 export const app = express();
 
@@ -130,8 +142,8 @@ app.use("/api", (_req, res) => res.status(404).json({ error: "unknown_endpoint" 
  * on any host that serves web/dist itself (a static CDN in front of the API,
  * e.g. Netlify) — local dev uses Vite's own server either way.
  */
-const WEB_DIST = path.resolve(here, "../../web/dist");
-if (SERVE_WEB && fs.existsSync(WEB_DIST)) {
+const WEB_DIST = here && path.resolve(here, "../../web/dist");
+if (SERVE_WEB && WEB_DIST && fs.existsSync(WEB_DIST)) {
   app.use(
     express.static(WEB_DIST, {
       maxAge: "1h",
